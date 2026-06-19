@@ -174,6 +174,7 @@ export default function HistoryPage() {
           "Summarize my most recent visit.",
         ]}
         onAsk={(q, h) => askAboutHistory(visits, h, q)}
+        agentId="mIdANk5YWRTjxIaRcFO4CwPaedU"
       />
     </main>
   );
