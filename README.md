@@ -90,6 +90,3 @@ npm run dev
 
 ---
 
-## Built for
-
-[Mind the Product Hackathon 2026](https://mindtheproduct.devpost.com) — built in 4 days with Claude Code + Google Gemini.
