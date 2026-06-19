@@ -71,6 +71,10 @@ export default function RecordPage() {
     reader.onload = () => {
       const dataUrl = reader.result as string;
       setImage({ data: dataUrl.split(",")[1], mimeType: f.type, name: f.name });
+      pendo?.track("prescription_photo_selected", {
+        mimeType: f.type,
+        fileName: f.name,
+      });
     };
     reader.readAsDataURL(f);
   };
@@ -103,6 +107,14 @@ export default function RecordPage() {
       setVisitSummary(res.visitSummary ?? undefined);
       setActionItems(res.actionItems ?? []);
       setStep("review");
+      pendo?.track("medicines_extracted", {
+        inputMode: mode,
+        medicineCount: res.medicines?.length ?? 0,
+        hasFollowUp: !!res.followUpDate,
+        hasPrimaryCondition: !!res.primaryCondition,
+        hasVisitSummary: !!res.visitSummary,
+        actionItemCount: res.actionItems?.length ?? 0,
+      });
     } catch (e) {
       setError(
         e instanceof Error
@@ -159,6 +171,17 @@ export default function RecordPage() {
       };
       await saveVisit(visit);
       await saveReminders(reminders);
+      pendo?.track("visit_recorded", {
+        inputMode: mode,
+        medicineCount: visit.medicines.length,
+        safetyScore: visit.safetyScore,
+        interactionCount: visit.interactions.length,
+        hasPriorPrescription: !!priorPrescription,
+        hasFollowUp: !!followUpDate,
+        primaryCondition: primaryCondition ?? "",
+        actionItemCount: visit.actionItems?.length ?? 0,
+        visitId: visit.id,
+      });
       router.push(`/audit/${visit.id}`);
     } catch (e) {
       setBusy(false);

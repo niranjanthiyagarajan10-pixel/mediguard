@@ -217,6 +217,17 @@ export default function QuickPage() {
       };
       await saveVisit(newVisit);
       await saveReminders(reminders);
+      pendo?.track("quick_visit_recorded", {
+        inputMethod: typing ? "typed" : "voice",
+        medicineCount: newVisit.medicines.length,
+        safetyScore: newVisit.safetyScore,
+        interactionCount: newVisit.interactions.length,
+        hasFollowUp: !!newVisit.followUpDate,
+        primaryCondition: newVisit.primaryCondition ?? "",
+        actionItemCount: newVisit.actionItems?.length ?? 0,
+        transcriptWordCount: text.trim().split(/\s+/).length,
+        visitId: newVisit.id,
+      });
 
       setVisit(newVisit);
       setReport(buildSpokenReport(newVisit));

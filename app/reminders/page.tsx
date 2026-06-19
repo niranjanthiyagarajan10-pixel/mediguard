@@ -23,13 +23,22 @@ export default function RemindersPage() {
 
   const toggle = async (id: string, active: boolean) => {
     await updateReminder(id, { active });
+    const r = reminders.find((x) => x.id === id);
+    pendo?.track("reminder_toggled", {
+      medicineName: r?.medicineName ?? "",
+      newActiveState: active,
+    });
     setReminders((prev) =>
       prev.map((r) => (r.id === id ? { ...r, active } : r))
     );
   };
 
   const remove = async (id: string) => {
+    const r = reminders.find((x) => x.id === id);
     await deleteReminder(id);
+    pendo?.track("reminder_deleted", {
+      medicineName: r?.medicineName ?? "",
+    });
     setReminders((prev) => prev.filter((r) => r.id !== id));
   };
 
@@ -41,6 +50,13 @@ export default function RemindersPage() {
       ? taken.filter((k) => k !== key)
       : [...taken, key];
     await updateReminder(reminderId, { taken: next });
+    pendo?.track("dose_logged", {
+      medicineName: r.medicineName,
+      dosage: r.dosage,
+      scheduledTime: key,
+      action: taken.includes(key) ? "untaken" : "taken",
+      source: "reminders",
+    });
     setReminders((prev) =>
       prev.map((x) => (x.id === reminderId ? { ...x, taken: next } : x))
     );
@@ -80,7 +96,13 @@ export default function RemindersPage() {
           Reminders
         </h1>
         <button
-          onClick={() => downloadIcs(reminders)}
+          onClick={() => {
+            downloadIcs(reminders);
+            pendo?.track("calendar_exported", {
+              reminderCount: reminders.length,
+              activeReminderCount: reminders.filter((r) => r.active).length,
+            });
+          }}
           className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-onp transition hover:opacity-90"
         >
           <CalendarPlus className="h-4 w-4" />

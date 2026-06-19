@@ -31,6 +31,20 @@ export default function ProfilePage() {
 
   const save = async () => {
     await saveProfile(profile);
+    pendo?.track("profile_saved", {
+      hasAge: profile.age != null,
+      hasSex: !!profile.sex,
+      hasAllergies: !!profile.allergies,
+      hasConditions: !!profile.conditions,
+      pregnancyStatus: profile.pregnancy ?? "none",
+      filledFieldCount: [
+        profile.age != null,
+        !!profile.sex,
+        !!profile.allergies,
+        !!profile.conditions,
+        !!profile.pregnancy && profile.pregnancy !== "none",
+      ].filter(Boolean).length,
+    });
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
@@ -38,6 +52,12 @@ export default function ProfilePage() {
   // Download everything the app has stored as one JSON file — the user's own backup.
   const exportData = async () => {
     const data = await exportAllData();
+    pendo?.track("data_exported", {
+      visitCount: data.visits.length,
+      reminderCount: data.reminders.length,
+      checkinCount: data.checkins.length,
+      hasProfile: !!data.profile,
+    });
     const blob = new Blob([JSON.stringify(data, null, 2)], {
       type: "application/json",
     });
@@ -56,6 +76,7 @@ export default function ProfilePage() {
       return;
     }
     await clearAllData();
+    pendo?.track("all_data_deleted");
     setProfile({});
     setConfirmDelete(false);
     setDeleted(true);

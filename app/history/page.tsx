@@ -53,7 +53,15 @@ export default function HistoryPage() {
   }, []);
 
   const remove = async (id: string) => {
+    const v = visits.find((x) => x.id === id);
     await deleteVisit(id);
+    if (v) {
+      pendo?.track("visit_deleted", {
+        safetyScore: v.safetyScore,
+        medicineCount: v.medicines.length,
+        primaryCondition: v.primaryCondition ?? "",
+      });
+    }
     setVisits((prev) => prev.filter((v) => v.id !== id));
   };
 
@@ -174,6 +182,12 @@ export default function HistoryPage() {
           "Summarize my most recent visit.",
         ]}
         onAsk={(q, h) => askAboutHistory(visits, h, q)}
+        trackEvent={{
+          name: "history_question_asked",
+          metadata: {
+            totalVisitCount: visits.length,
+          },
+        }}
       />
     </main>
   );

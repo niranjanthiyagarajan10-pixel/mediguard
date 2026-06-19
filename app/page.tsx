@@ -76,6 +76,13 @@ export default function Home() {
       ? taken.filter((k) => k !== key)
       : [...taken, key];
     await updateReminder(reminderId, { taken: next });
+    pendo?.track("dose_logged", {
+      medicineName: r.medicineName,
+      dosage: r.dosage,
+      scheduledTime: key,
+      action: taken.includes(key) ? "untaken" : "taken",
+      source: "dashboard",
+    });
     setReminders((prev) =>
       prev.map((x) => (x.id === reminderId ? { ...x, taken: next } : x))
     );
@@ -88,6 +95,12 @@ export default function Home() {
       a.id === itemId ? { ...a, done: true } : a
     );
     await updateVisit(visitId, { actionItems: next });
+    const item = v.actionItems.find((a) => a.id === itemId);
+    pendo?.track("action_item_completed", {
+      itemCategory: item?.category ?? "",
+      source: "dashboard",
+      primaryCondition: v.primaryCondition ?? "",
+    });
     setVisits((prev) =>
       prev.map((x) => (x.id === visitId ? { ...x, actionItems: next } : x))
     );
