@@ -19,11 +19,16 @@ export default function AskChat({
   subtitle,
   suggestions,
   onAsk,
+  trackEvent,
 }: {
   title: string;
   subtitle: string;
   suggestions: string[];
   onAsk: (question: string, history: ChatMessage[]) => Promise<string>;
+  trackEvent?: {
+    name: string;
+    metadata?: Record<string, string | number | boolean>;
+  };
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -63,6 +68,15 @@ export default function AskChat({
       const answer = await onAsk(q, history);
       setMessages((prev) => [...prev, { role: "assistant", content: answer }]);
       if (fromVoice) speak(answer);
+      if (trackEvent) {
+        pendo?.track(trackEvent.name, {
+          ...trackEvent.metadata,
+          questionLength: q.length,
+          fromVoice,
+          conversationTurnCount:
+            messages.filter((m) => m.role === "user").length + 1,
+        });
+      }
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "Couldn't get an answer. Please try again."

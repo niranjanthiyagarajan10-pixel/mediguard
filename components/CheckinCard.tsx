@@ -60,6 +60,13 @@ export default function CheckinCard({ visits }: { visits: Visit[] }) {
       createdAt: new Date().toISOString(),
     };
     await saveCheckin(checkin);
+    pendo?.track("symptom_checkin_saved", {
+      feeling,
+      symptomCount: symptoms.length,
+      symptoms: symptoms.join(","),
+      hasNote: !!note.trim(),
+      isUpdate: !!saved,
+    });
     setSaved(checkin);
     setEditing(false);
   };

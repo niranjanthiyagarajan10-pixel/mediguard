@@ -80,17 +80,29 @@ export default function AuditPage({ params }: { params: { visitId: string } }) {
 
   const copyQuestions = async () => {
     await navigator.clipboard.writeText(visit.pharmacistQuestions.join("\n"));
+    pendo?.track("pharmacist_questions_copied", {
+      questionCount: visit.pharmacistQuestions.length,
+      safetyScore: visit.safetyScore,
+    });
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   const toggleAction = async (id: string) => {
     if (!visit.actionItems) return;
+    const item = visit.actionItems.find((a) => a.id === id);
     const next = visit.actionItems.map((a) =>
       a.id === id ? { ...a, done: !a.done } : a
     );
     setVisit({ ...visit, actionItems: next });
     await updateVisit(visit.id, { actionItems: next });
+    if (item && !item.done) {
+      pendo?.track("action_item_completed", {
+        itemCategory: item.category ?? "",
+        source: "audit",
+        primaryCondition: visit.primaryCondition ?? "",
+      });
+    }
   };
 
   return (
@@ -243,6 +255,13 @@ export default function AuditPage({ params }: { params: { visitId: string } }) {
           "Why was this prescribed?",
         ]}
         onAsk={(q, h) => askAboutMeds(q, visit, h, profile)}
+        trackEvent={{
+          name: "medicine_question_asked",
+          metadata: {
+            visitSafetyScore: visit.safetyScore,
+            visitMedicineCount: visit.medicines.length,
+          },
+        }}
       />
 
       {visit.followUpDate && (
