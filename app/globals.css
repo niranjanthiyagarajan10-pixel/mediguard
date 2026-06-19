@@ -2,26 +2,96 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Apple-style pastel canvas: soft light-yellow brand + light sky-blue accent on a
+   cool neutral background. Every color is a CSS variable, so flipping the .dark set
+   on <html> re-themes the whole app for free. The accent is split:
+     --primary  = soft yellow used for FILLS (paired with --on-primary dark ink)
+     --accent   = readable sky-blue used for TEXT, links, icons, chip labels
+   Pastels live in washes (--primary-light / --accent-light); text stays readable. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+  --primary: #FFD84D; /* soft light sunshine — fills (buttons, mic, active states) */
+  --on-primary: #1C1C1E; /* dark ink on yellow fills */
+  --accent: #0A6CE0; /* readable sky blue — text, links, icons */
+  --primary-light: #FFF3C7; /* light-yellow wash */
+  --accent-light: #E5F1FF; /* light sky-blue wash (chips, icon tiles) */
+  --warning: #FF9500; /* Apple systemOrange */
+  --danger: #FF3B30; /* Apple systemRed */
+  --danger-light: #FFE5E3; /* soft red wash behind interaction warnings */
+  --success: #34C759; /* Apple systemGreen */
+  --bg: #F2F6FC; /* cool sky-tinted canvas */
+  --surface: #FFFFFF;
+  --text: #1C1C1E;
+  --muted: #8A8F9A; /* cool gray */
+  --border: #E2E8F1; /* cool hairline separator */
+  --surface-blur: rgba(255, 255, 255, 0.72); /* frosted nav bg (no-alpha-token workaround) */
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.dark {
+  color-scheme: dark;
+  --primary: #FFD84D; /* same soft sunshine — pops on dark surfaces */
+  --on-primary: #1C1C1E;
+  --accent: #5AB0FF; /* bright sky blue reads great on dark */
+  --primary-light: #322C16; /* deep amber wash */
+  --accent-light: #16314D; /* deep sky wash — near-white text stays legible */
+  --warning: #FF9F0A;
+  --danger: #FF453A;
+  --danger-light: #4A1D1D; /* deep maroon — near-white text stays legible on it */
+  --success: #30D158;
+  --bg: #0C0E12; /* cool near-black canvas */
+  --surface: #1A1D23; /* cool elevated card */
+  --text: #F5F5F7;
+  --muted: #98A0AD;
+  --border: #2C313A;
+  --surface-blur: rgba(26, 29, 35, 0.72); /* frosted nav bg */
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  font-family: var(--font-inter), system-ui, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
+html {
+  scroll-behavior: smooth;
+}
+
+/* App-wide tactile feel: every button/link gets a smooth transition + a subtle
+   press, and a clear keyboard-focus ring. Done once here instead of on each
+   element so the whole app feels consistent and "Apple-soft" without per-button edits. */
+button,
+a,
+[role="button"] {
+  transition: transform 0.12s ease, opacity 0.15s ease, background-color 0.15s ease,
+    border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:not(:disabled):active,
+[role="button"]:active {
+  transform: scale(0.97);
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Respect users who ask for less motion: no press-scale, no smooth-scroll, no app animations. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
