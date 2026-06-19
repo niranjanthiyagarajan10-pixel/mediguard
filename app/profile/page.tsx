@@ -31,6 +31,23 @@ export default function ProfilePage() {
 
   const save = async () => {
     await saveProfile(profile);
+
+    let visitorId = localStorage.getItem("pendo_visitor_id");
+    if (!visitorId) {
+      visitorId = crypto.randomUUID();
+      localStorage.setItem("pendo_visitor_id", visitorId);
+    }
+    pendo.identify({
+      visitor: {
+        id: visitorId,
+        age: profile.age,
+        sex: profile.sex,
+        allergies: profile.allergies,
+        conditions: profile.conditions,
+        pregnancy: profile.pregnancy,
+      },
+    });
+
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
