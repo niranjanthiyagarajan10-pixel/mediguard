@@ -14,6 +14,8 @@ import {
   CheckCircle2,
   Circle,
   ListChecks,
+  Globe,
+  ExternalLink,
 } from "lucide-react";
 import { getVisit, getProfile, updateVisit } from "@/lib/db";
 import { askAboutMeds } from "@/lib/agents";
@@ -204,6 +206,43 @@ export default function AuditPage({ params }: { params: { visitId: string } }) {
               </li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {visit.safetyNotes && (
+        <section className="mt-8 rounded-2xl border border-border bg-surface p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Globe className="h-5 w-5 text-accent" />
+              <h2 className="font-heading text-xl font-semibold text-text">
+                Checked against current sources
+              </h2>
+            </div>
+            <SpeakButton text={visit.safetyNotes} className="shrink-0" />
+          </div>
+          <p className="mt-3 leading-relaxed text-muted">{visit.safetyNotes}</p>
+          {visit.safetySources && visit.safetySources.length > 0 && (
+            <div className="mt-4 border-t border-border pt-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted">
+                Sources
+              </p>
+              <ul className="mt-2 space-y-1.5">
+                {visit.safetySources.map((s, i) => (
+                  <li key={i}>
+                    <a
+                      href={s.uri}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-start gap-1.5 text-sm font-medium text-accent hover:underline"
+                    >
+                      <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                      <span>{s.title}</span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </section>
       )}
 

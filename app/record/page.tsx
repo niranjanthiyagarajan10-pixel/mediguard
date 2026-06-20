@@ -19,6 +19,7 @@ import {
   auditInteractions,
   educatePatient,
   buildReminders,
+  getGroundedSafetyNotes,
 } from "@/lib/agents";
 import { saveVisit, saveReminders, getProfile, getAllVisits } from "@/lib/db";
 import type { Medicine, Visit, ActionItem } from "@/lib/types";
@@ -133,6 +134,21 @@ export default function RecordPage() {
       const { sideEffects, pharmacistQuestions, glossaryTerms } =
         await educatePatient(medicines, interactions, profile);
 
+      // Best-effort grounded double-check against current web sources. Fully guarded — if grounding
+      // isn't enabled on the key, or quota is hit, we swallow it and save the visit without notes.
+      let safetyNotes: string | undefined;
+      let safetySources: { title: string; uri: string }[] | undefined;
+      try {
+        setStatus("Checking current sources…");
+        const grounded = await getGroundedSafetyNotes(medicines, interactions);
+        if (grounded.notes) {
+          safetyNotes = grounded.notes;
+          safetySources = grounded.sources;
+        }
+      } catch {
+        // grounding is optional — ignore any failure
+      }
+
       setStatus("Setting up reminders…");
       const reminders = await buildReminders(medicines);
 
@@ -156,6 +172,8 @@ export default function RecordPage() {
           category: a.category,
           done: false,
         })),
+        safetyNotes,
+        safetySources,
       };
       await saveVisit(visit);
       await saveReminders(reminders);

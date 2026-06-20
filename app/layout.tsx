@@ -1,9 +1,10 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, DM_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import PendoInitializer from "./PendoInitializer";
+import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const dmMono = DM_Mono({
@@ -24,7 +25,12 @@ const themeScript = `(function(){try{var t=localStorage.getItem('theme');var d=t
 export const metadata: Metadata = {
   title: "MediGuard — Know exactly what you're taking",
   description: "Record your doctor visit. Get a full safety audit. Never miss a dose.",
+  // Makes the installed PWA feel native on iOS (standalone, branded status bar + title).
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "MediGuard" },
 };
+
+// Brand-yellow browser theme color (address bar / status bar on mobile).
+export const viewport: Viewport = { themeColor: "#FFD84D" };
 
 export default function RootLayout({
   children,
@@ -49,6 +55,7 @@ export default function RootLayout({
         className={`${inter.variable} ${dmMono.variable} font-sans`}
       >
         <PendoInitializer />
+        <ServiceWorkerRegister />
         <Navbar />
         {children}
         {novusAppId && (

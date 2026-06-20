@@ -20,6 +20,7 @@ import {
   auditInteractions,
   educatePatient,
   buildReminders,
+  getGroundedSafetyNotes,
 } from "@/lib/agents";
 import { saveVisit, saveReminders, getProfile, getAllVisits } from "@/lib/db";
 import {
@@ -192,6 +193,21 @@ export default function QuickPage() {
       const { sideEffects, pharmacistQuestions, glossaryTerms } =
         await educatePatient(medicines, interactions, profile);
 
+      // Additive, fully optional: double-check against current web sources. Any failure
+      // (grounding off, quota, network) is swallowed — the visit saves without notes.
+      let safetyNotes: string | undefined;
+      let safetySources: { title: string; uri: string }[] | undefined;
+      try {
+        setStatus("Checking current sources…");
+        const grounded = await getGroundedSafetyNotes(medicines, interactions);
+        if (grounded.notes) {
+          safetyNotes = grounded.notes;
+          safetySources = grounded.sources;
+        }
+      } catch {
+        /* grounding optional */
+      }
+
       setStatus("Setting up reminders…");
       const reminders = await buildReminders(medicines);
 
@@ -214,6 +230,8 @@ export default function QuickPage() {
           category: a.category,
           done: false,
         })),
+        safetyNotes,
+        safetySources,
       };
       await saveVisit(newVisit);
       await saveReminders(reminders);

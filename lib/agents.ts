@@ -18,6 +18,9 @@ const MODELS = {
   reminders: ['gemini-2.5-flash-lite', 'gemini-2.5-flash'],
   chatVisit: ['gemini-2.5-flash', 'gemini-2.5-flash-lite'],
   chatHistory: ['gemini-3.5-flash', 'gemini-2.5-flash'],
+  // Google-Search grounding is supported on 2.5-flash; keep it single-model since the whole
+  // grounded call is best-effort and try/catch-guarded at the caller.
+  grounded: ['gemini-2.5-flash'],
 } as const
 
 type GenOpts = { image?: { data: string; mimeType: string }; models?: readonly string[] }
@@ -54,6 +57,32 @@ async function generate(prompt: string, opts: GenOpts = {}): Promise<string> {
     throw new Error(data.error || 'The AI service failed. Please try again.')
   }
   return data.text as string
+}
+
+// Like generate(), but asks the route for a Google-Search-grounded answer and returns the prose
+// plus its web citations. Powers only the additive "current sources" double-check — the caller
+// wraps it in try/catch, so the core audit never depends on grounding being enabled.
+type Source = { title: string; uri: string }
+async function generateWithSources(
+  prompt: string,
+  opts: { models?: readonly string[] } = {}
+): Promise<{ text: string; sources: Source[] }> {
+  let res: Response
+  try {
+    res = await fetch('/api/ai', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, models: opts.models, grounded: true }),
+    })
+  } catch {
+    throw new Error('Could not reach the AI service.')
+  }
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || 'The AI service failed.')
+  return {
+    text: data.text as string,
+    sources: (data.sources ?? []) as Source[],
+  }
 }
 
 // Gemini occasionally wraps JSON in a sentence — slice to the outermost {} or [].
@@ -319,4 +348,38 @@ ${historyBlock(history)}
 Patient question: ${question}
 `
   return generate(prompt, { models: MODELS.chatHistory })
+}
+
+// Additive, best-effort "current sources" double-check. A short, plain-language safety note focused
+// on the flagged interactions, grounded in live Google Search with citations. Prose out (no askJson).
+// The caller wraps this in try/catch — if grounding isn't enabled on the key, or quota is hit, the
+// visit just saves without notes and the rest of the audit is untouched.
+export async function getGroundedSafetyNotes(
+  medicines: Medicine[],
+  interactions: Interaction[]
+): Promise<{ notes: string; sources: Source[] }> {
+  const medNames = medicines.map((m) => m.name).filter(Boolean)
+  const flagged = interactions
+    .filter((i) => i.severity !== 'low')
+    .map((i) => `${i.medicine1} + ${i.medicine2}`)
+  const prompt = `
+You are a careful pharmacist double-checking a medication safety audit against current, reputable
+sources (drug-information databases, health authorities). In 3-4 plain-language sentences, give the
+patient a brief "current safety notes" summary focused on the most important interaction or caution
+among their medicines. Be specific and practical. Do not invent sources or cite anything you didn't
+actually find.
+
+Medicines: ${medNames.join(', ') || 'none listed'}
+Flagged interactions to prioritize: ${
+    flagged.length
+      ? flagged.join('; ')
+      : 'none flagged — give a brief general safety note for these medicines'
+  }
+
+Plain English, no markdown, no headings.
+`
+  const { text, sources } = await generateWithSources(prompt, {
+    models: MODELS.grounded,
+  })
+  return { notes: text, sources }
 }

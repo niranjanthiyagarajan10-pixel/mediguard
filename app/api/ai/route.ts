@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenerativeAI, type Tool } from '@google/generative-ai'
 import { NextResponse } from 'next/server'
 
 // Server-side Gemini proxy. The key lives ONLY here (process.env.GEMINI_API_KEY, no NEXT_PUBLIC_
@@ -30,10 +30,16 @@ function isRetriable(e: unknown) {
   )
 }
 
+// gemini-2.5 grounding uses the `googleSearch` tool. The installed SDK types predate it (they only
+// know the 1.5-era `googleSearchRetrieval`), so cast through unknown — it's forwarded verbatim to
+// the REST API, which accepts `googleSearch` for 2.x models.
+const searchTool = [{ googleSearch: {} }] as unknown as Tool[]
+
 type Body = {
   prompt?: string
   models?: string[]
   image?: { data: string; mimeType: string }
+  grounded?: boolean
 }
 
 export async function POST(req: Request) {
@@ -51,7 +57,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 })
   }
 
-  const { prompt, image } = body
+  const { prompt, image, grounded } = body
   if (!prompt) {
     return NextResponse.json({ error: 'Missing prompt.' }, { status: 400 })
   }
@@ -62,11 +68,33 @@ export async function POST(req: Request) {
   let lastErr: unknown
   for (let i = 0; i < models.length; i++) {
     try {
-      const m = getModel(models[i])
+      // Grounded calls need a model built with the Search tool — don't reuse (or pollute) the
+      // shared non-grounded client cache, so build it inline.
+      const m = grounded
+        ? genAI.getGenerativeModel({ model: models[i], tools: searchTool })
+        : getModel(models[i])
       const result = image
         ? await m.generateContent([prompt, { inlineData: image }])
         : await m.generateContent(prompt)
-      const text = result.response.text().replace(/```json|```/g, '').trim()
+      const response = result.response
+      const text = response.text().replace(/```json|```/g, '').trim()
+      if (grounded) {
+        // Citations: response.candidates[0].groundingMetadata.groundingChunks[].web → {title, uri},
+        // deduped by uri and capped at 5.
+        const chunks =
+          response.candidates?.[0]?.groundingMetadata?.groundingChunks ?? []
+        const seen = new Set<string>()
+        const sources: { title: string; uri: string }[] = []
+        for (const c of chunks) {
+          const uri = c.web?.uri
+          if (uri && !seen.has(uri)) {
+            seen.add(uri)
+            sources.push({ title: c.web?.title || uri, uri })
+            if (sources.length >= 5) break
+          }
+        }
+        return NextResponse.json({ text, sources })
+      }
       return NextResponse.json({ text })
     } catch (e) {
       lastErr = e

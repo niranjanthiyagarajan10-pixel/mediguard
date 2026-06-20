@@ -62,6 +62,17 @@ export function getTodayDoses(reminders: Reminder[]): Dose[] {
   return getDosesForDate(reminders, new Date());
 }
 
+// Today's doses whose scheduled time has already passed and which haven't been marked taken — the
+// "you missed this" nudge. Compares scheduled "HH:MM" against the current "HH:MM" (string compare
+// is safe because both are zero-padded 24h), so a 08:00 dose is "missed" once it's past 08:00.
+export function getMissedDoses(reminders: Reminder[]): Dose[] {
+  const now = new Date();
+  const nowHM = `${String(now.getHours()).padStart(2, "0")}:${String(
+    now.getMinutes()
+  ).padStart(2, "0")}`;
+  return getTodayDoses(reminders).filter((d) => !d.taken && d.time < nowHM);
+}
+
 // Adherence over the last 7 days plus a current streak — all derived from Reminder.taken, so no
 // extra storage. Days with no scheduled doses are ignored (they neither help nor break a streak).
 export function getAdherenceStats(reminders: Reminder[]): AdherenceStats {

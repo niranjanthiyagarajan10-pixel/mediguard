@@ -14,9 +14,10 @@ import {
   ArrowRight,
   Flame,
   ListChecks,
+  AlertTriangle,
 } from "lucide-react";
 import { getAllReminders, getAllVisits, updateReminder, updateVisit } from "@/lib/db";
-import { getTodayDoses, getAdherenceStats } from "@/lib/doses";
+import { getTodayDoses, getMissedDoses, getAdherenceStats } from "@/lib/doses";
 import { to12h } from "@/components/ReminderCard";
 import SegmentMeter from "@/components/SegmentMeter";
 import SpeakButton from "@/components/SpeakButton";
@@ -59,6 +60,11 @@ export default function Home() {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [visits, setVisits] = useState<Visit[]>([]);
   const [loading, setLoading] = useState(true);
+  // Follow-ups the user tapped "Not yet" on this session — hidden until reload, so the prompt
+  // doesn't nag on every dashboard visit but also isn't permanently dismissed.
+  const [dismissedFollowUps, setDismissedFollowUps] = useState<Set<string>>(
+    new Set()
+  );
 
   useEffect(() => {
     Promise.all([getAllReminders(), getAllVisits()]).then(([r, v]) => {
@@ -90,6 +96,14 @@ export default function Home() {
     await updateVisit(visitId, { actionItems: next });
     setVisits((prev) =>
       prev.map((x) => (x.id === visitId ? { ...x, actionItems: next } : x))
+    );
+  };
+
+  // "Yes, I went" on a due/overdue follow-up — closes the loop so it never prompts again.
+  const confirmFollowUp = async (visitId: string) => {
+    await updateVisit(visitId, { followUpAttended: true });
+    setVisits((prev) =>
+      prev.map((x) => (x.id === visitId ? { ...x, followUpAttended: true } : x))
     );
   };
 
@@ -167,13 +181,47 @@ export default function Home() {
         .join(". ")}`
     : "";
 
+  // Doses already past-due today and not marked taken — the "act now" nudge.
+  const missedDoses = getMissedDoses(reminders);
+  // Medicine names in any medium/high interaction across visits. A missed dose of one of these
+  // (e.g. a blood thinner) is riskier than a missed vitamin, so its row escalates.
+  const riskyMeds = new Set<string>();
+  for (const v of visits) {
+    for (const it of v.interactions ?? []) {
+      if (it.severity !== "low") {
+        riskyMeds.add(it.medicine1.toLowerCase());
+        riskyMeds.add(it.medicine2.toLowerCase());
+      }
+    }
+  }
+  const isRiskyDose = (name: string) => {
+    const n = name.toLowerCase();
+    return Array.from(riskyMeds).some((m) => n.includes(m) || m.includes(n));
+  };
+
   const today0 = new Date();
   today0.setHours(0, 0, 0, 0);
-  const nextFollowUp = visits
-    .filter((v) => v.followUpDate)
-    .map((v) => ({ date: v.followUpDate as string, t: new Date(v.followUpDate + "T00:00").getTime() }))
-    .filter((x) => x.t >= today0.getTime())
+  // Unattended follow-ups (carry visitId so "Yes, I went" can close the right one), minus ones
+  // dismissed this session. Surface the most recent due/overdue one first (the closed-loop "did
+  // you go?" prompt), else the soonest upcoming (countdown).
+  const pendingFollowUps = visits
+    .filter(
+      (v) =>
+        v.followUpDate && !v.followUpAttended && !dismissedFollowUps.has(v.id)
+    )
+    .map((v) => ({
+      visitId: v.id,
+      date: v.followUpDate as string,
+      t: new Date(v.followUpDate + "T00:00").getTime(),
+    }));
+  const dueFollowUp = pendingFollowUps
+    .filter((x) => x.t <= today0.getTime())
+    .sort((a, b) => b.t - a.t)[0];
+  const upcomingFollowUp = pendingFollowUps
+    .filter((x) => x.t > today0.getTime())
     .sort((a, b) => a.t - b.t)[0];
+  const nextFollowUp = dueFollowUp ?? upcomingFollowUp;
+  const followUpDue = !!dueFollowUp;
   const followUpDays = nextFollowUp
     ? Math.round((nextFollowUp.t - today0.getTime()) / 86_400_000)
     : null;
@@ -231,9 +279,76 @@ export default function Home() {
         <ArrowRight className="h-5 w-5 shrink-0" />
       </Link>
 
+      {/* Missed doses — past-due today and not taken. Warning tone so it reads as "act now". */}
+      {missedDoses.length > 0 && (
+        <section className="mt-4 rounded-2xl bg-danger-light p-5">
+          <div className="flex items-center gap-2 text-danger">
+            <AlertTriangle className="h-5 w-5" />
+            <h2 className="font-heading text-lg font-semibold">
+              {missedDoses.length === 1
+                ? "1 dose still due today"
+                : `${missedDoses.length} doses still due today`}
+            </h2>
+          </div>
+          <ul className="mt-3 space-y-2">
+            {missedDoses.map((dose) => {
+              const risky = isRiskyDose(dose.name);
+              return (
+                <li
+                  key={dose.reminderId + dose.time}
+                  className={`flex items-center justify-between rounded-xl px-4 py-2.5 ${
+                    risky ? "bg-danger text-white" : "bg-surface"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <span
+                      className={`font-medium ${risky ? "text-white" : "text-text"}`}
+                    >
+                      {dose.name}{" "}
+                      <span
+                        className={`font-mono text-sm ${
+                          risky ? "text-white/80" : "text-muted"
+                        }`}
+                      >
+                        {dose.dosage}
+                      </span>
+                    </span>
+                    {risky && (
+                      <p className="text-xs text-white/90">
+                        This one has a known interaction — don&rsquo;t skip it.
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`font-mono text-sm ${
+                        risky ? "text-white/90" : "text-danger"
+                      }`}
+                    >
+                      {to12h(dose.time)}
+                    </span>
+                    <button
+                      onClick={() => toggleTaken(dose.reminderId, dose.key)}
+                      aria-label="Mark dose taken"
+                      className={`transition ${
+                        risky
+                          ? "text-white hover:text-white/80"
+                          : "text-muted hover:text-success"
+                      }`}
+                    >
+                      <Circle className="h-6 w-6" />
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
       {/* Today's doses */}
       <section className="mt-4 rounded-2xl bg-primary-light p-5">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-y-2">
           <div className="flex items-center gap-2 text-accent">
             <Sun className="h-5 w-5" />
             <h2 className="font-heading text-lg font-semibold">
@@ -309,7 +424,7 @@ export default function Home() {
 
       {/* This week — adherence streak + weekly % */}
       {hasWeekData && (
-        <section className="mt-4 flex items-center justify-between rounded-2xl border border-border bg-surface p-5">
+        <section className="mt-4 flex flex-wrap items-center justify-between gap-y-3 rounded-2xl border border-border bg-surface p-5">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent-light text-accent">
               <Flame className="h-5 w-5" />
@@ -375,21 +490,58 @@ export default function Home() {
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           {nextFollowUp && (
             <section className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-5">
-              <CalendarClock className="h-5 w-5 shrink-0 text-accent" />
-              <div>
-                <h2 className="font-medium text-text">Next follow-up</h2>
-                <p className="text-sm text-muted">
-                  {followUpDays === 0
-                    ? "Today"
-                    : followUpDays === 1
-                      ? "Tomorrow"
-                      : `In ${followUpDays} days`}{" "}
-                  ·{" "}
-                  {new Date(nextFollowUp.date + "T00:00").toLocaleDateString(
-                    undefined,
-                    { month: "long", day: "numeric" }
-                  )}
-                </p>
+              <CalendarClock
+                className={`h-5 w-5 shrink-0 ${
+                  followUpDue ? "text-warning" : "text-accent"
+                }`}
+              />
+              <div className="min-w-0 flex-1">
+                <h2 className="font-medium text-text">
+                  {followUpDue
+                    ? "Did you attend your follow-up?"
+                    : "Next follow-up"}
+                </h2>
+                {followUpDue ? (
+                  <>
+                    <p className="text-sm text-muted">
+                      {followUpDays === 0
+                        ? "Scheduled for today"
+                        : `Was due ${new Date(
+                            nextFollowUp.date + "T00:00"
+                          ).toLocaleDateString(undefined, {
+                            month: "long",
+                            day: "numeric",
+                          })}`}
+                    </p>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        onClick={() => confirmFollowUp(nextFollowUp.visitId)}
+                        className="rounded-full bg-primary px-4 py-1.5 text-sm font-medium text-onp transition hover:opacity-90"
+                      >
+                        Yes, I went
+                      </button>
+                      <button
+                        onClick={() =>
+                          setDismissedFollowUps((prev) =>
+                            new Set(prev).add(nextFollowUp.visitId)
+                          )
+                        }
+                        className="rounded-full border border-border px-4 py-1.5 text-sm font-medium text-muted transition hover:text-text"
+                      >
+                        Not yet
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted">
+                    {followUpDays === 1 ? "Tomorrow" : `In ${followUpDays} days`}{" "}
+                    ·{" "}
+                    {new Date(nextFollowUp.date + "T00:00").toLocaleDateString(
+                      undefined,
+                      { month: "long", day: "numeric" }
+                    )}
+                  </p>
+                )}
               </div>
             </section>
           )}

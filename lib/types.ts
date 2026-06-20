@@ -62,6 +62,12 @@ export type Visit = {
   visitSummary?: string
   // Non-medicine next steps the patient can check off (care-plan accountability)
   actionItems?: ActionItem[]
+  // Set true once the patient confirms they attended the follow-up (closes the follow-up loop)
+  followUpAttended?: boolean
+  // Optional grounded "current sources" double-check of the audit + its citations. Absent unless
+  // the (best-effort, try/catch-guarded) Google-Search-grounded call succeeded.
+  safetyNotes?: string
+  safetySources?: { title: string; uri: string }[]
 }
 
 export type Reminder = {

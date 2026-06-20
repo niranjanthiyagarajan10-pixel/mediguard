@@ -3,23 +3,41 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Sun, BellOff, CalendarPlus, CheckCircle2, Circle, Flame } from "lucide-react";
-import { getAllReminders, updateReminder, deleteReminder } from "@/lib/db";
+import {
+  getAllReminders,
+  getAllVisits,
+  updateReminder,
+  deleteReminder,
+} from "@/lib/db";
 import { downloadIcs } from "@/lib/ics";
 import { getTodayDoses, getAdherenceStats } from "@/lib/doses";
-import type { Reminder } from "@/lib/types";
+import type { Reminder, Visit } from "@/lib/types";
 import ReminderCard, { to12h } from "@/components/ReminderCard";
 import SegmentMeter from "@/components/SegmentMeter";
 
 export default function RemindersPage() {
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [visits, setVisits] = useState<Visit[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getAllReminders().then((r) => {
+    Promise.all([getAllReminders(), getAllVisits()]).then(([r, v]) => {
       setReminders(r);
+      setVisits(v);
       setLoading(false);
     });
   }, []);
+
+  // Future, still-unattended follow-ups become alarmed all-day calendar events on export.
+  const followUps = () => {
+    const today = new Date().toISOString().split("T")[0];
+    return visits
+      .filter((v) => v.followUpDate && !v.followUpAttended && v.followUpDate >= today)
+      .map((v) => ({
+        date: v.followUpDate as string,
+        label: v.primaryCondition ?? "Doctor visit",
+      }));
+  };
 
   const toggle = async (id: string, active: boolean) => {
     await updateReminder(id, { active });
@@ -75,12 +93,12 @@ export default function RemindersPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-heading text-3xl font-semibold text-text">
           Reminders
         </h1>
         <button
-          onClick={() => downloadIcs(reminders)}
+          onClick={() => downloadIcs(reminders, followUps())}
           className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-onp transition hover:opacity-90"
         >
           <CalendarPlus className="h-4 w-4" />
@@ -88,11 +106,12 @@ export default function RemindersPage() {
         </button>
       </div>
       <p className="mt-2 text-sm text-muted">
-        Export once and your own calendar app handles the reminders — no need to
-        keep this open.
+        Export once and your own calendar app handles the reminders — alarms ring
+        at each dose time, plus a heads-up the day before any follow-up. No need
+        to keep this open.
       </p>
 
-      <div className="mt-4 flex items-center gap-3 text-sm">
+      <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
         <span className="flex items-center gap-1.5 font-medium text-accent">
           <Flame className="h-4 w-4" />
           {streak > 0 ? `${streak}-day streak` : "No streak yet"}
@@ -106,7 +125,7 @@ export default function RemindersPage() {
 
       {todayDoses.length > 0 && (
         <section className="mt-6 rounded-2xl bg-primary-light p-5">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-y-2">
             <div className="flex items-center gap-2 text-accent">
               <Sun className="h-5 w-5" />
               <h2 className="font-heading text-lg font-semibold">
