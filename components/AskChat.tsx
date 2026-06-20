@@ -19,11 +19,13 @@ export default function AskChat({
   subtitle,
   suggestions,
   onAsk,
+  agentId,
 }: {
   title: string;
   subtitle: string;
   suggestions: string[];
   onAsk: (question: string, history: ChatMessage[]) => Promise<string>;
+  agentId: string;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -33,6 +35,7 @@ export default function AskChat({
   const [sttSupported, setSttSupported] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const conversationIdRef = useRef(crypto.randomUUID());
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -50,7 +53,7 @@ export default function AskChat({
 
   // fromVoice: when the question was spoken, read the answer back aloud — "speak a question, hear
   // the answer" (elder-friendly).
-  const send = async (question: string, fromVoice = false) => {
+  const send = async (question: string, fromVoice = false, isSuggested = false) => {
     const q = question.trim();
     if (!q || busy) return;
     setInput("");
@@ -59,9 +62,27 @@ export default function AskChat({
     const history = messages.slice(-6);
     setMessages((prev) => [...prev, { role: "user", content: q }]);
     setBusy(true);
+
+    const promptMessageId = crypto.randomUUID();
+    window.pendo?.trackAgent("prompt", {
+      agentId,
+      conversationId: conversationIdRef.current,
+      messageId: promptMessageId,
+      content: q,
+      suggestedPrompt: isSuggested,
+    });
+
     try {
       const answer = await onAsk(q, history);
       setMessages((prev) => [...prev, { role: "assistant", content: answer }]);
+
+      window.pendo?.trackAgent("agent_response", {
+        agentId,
+        conversationId: conversationIdRef.current,
+        messageId: crypto.randomUUID(),
+        content: answer,
+      });
+
       if (fromVoice) speak(answer);
     } catch (e) {
       setError(
@@ -112,7 +133,7 @@ export default function AskChat({
             {suggestions.map((s) => (
               <button
                 key={s}
-                onClick={() => send(s)}
+                onClick={() => send(s, false, true)}
                 disabled={busy}
                 className="rounded-full border border-border bg-bg px-3 py-1.5 text-sm text-text transition hover:border-accent disabled:opacity-60"
               >

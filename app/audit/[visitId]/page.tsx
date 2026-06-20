@@ -282,6 +282,7 @@ export default function AuditPage({ params }: { params: { visitId: string } }) {
           "Why was this prescribed?",
         ]}
         onAsk={(q, h) => askAboutMeds(q, visit, h, profile)}
+        agentId="FbXNYHha2wqqC3eRohq8WGNFeO0"
       />
 
       {visit.followUpDate && (
